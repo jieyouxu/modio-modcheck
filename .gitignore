@@ -12,3 +12,10 @@ Cargo.lock
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# Added by cargo
+
+/target
+
+# mod.io OAuth2 token
+OAUTH2_ACCESS_TOKEN
