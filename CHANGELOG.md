@@ -3,6 +3,8 @@
 <!-- next-header -->
 ## [Unreleased] - ReleaseDate
 
+- Don't build linux-musl artifacts
+
 ## [0.1.0] - 2024-06-15
 
 - Initial release
