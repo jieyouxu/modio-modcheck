@@ -1,0 +1,4 @@
+allow-branch = ["master"]
+publish = false
+pre-release-commit-message = "chore: release"
+tag-message = "chore: release {{crate_name}} version {{version}}"

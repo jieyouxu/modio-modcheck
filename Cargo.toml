@@ -2,7 +2,7 @@
 edition = "2021"
 name = "modio-modcheck"
 version = "0.1.0"
-url = "https://github.com/jieyouxu/modio-modcheck"
+repository = "https://github.com/jieyouxu/modio-modcheck"
 
 [dependencies]
 anyhow = "1.0.86"
@@ -35,4 +35,18 @@ cargo-dist-version = "0.16.0"
 # The installers to generate for each app
 installers = []
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+# CI backends to support
+ci = "github"
+# Publish jobs to run in CI
+pr-run-mode = "plan"
+
+[workspace.metadata.release]
+publish = false
+pre-release-replacements = [
+  {file="CHANGELOG.md", search="Unreleased", replace="{{version}}", min=1},
+  {file="CHANGELOG.md", search="\\.\\.\\.HEAD", replace="...{{tag_name}}", exactly=1},
+  {file="CHANGELOG.md", search="ReleaseDate", replace="{{date}}", min=1},
+  {file="CHANGELOG.md", search="<!-- next-header -->", replace="<!-- next-header -->\n## [Unreleased] - ReleaseDate\n", exactly=1},
+  {file="CHANGELOG.md", search="<!-- next-url -->", replace="<!-- next-url -->\n[Unreleased]: https://github.com/jieyouxu/modio-modcheck/compare/{{tag_name}}...HEAD", exactly=1},
+]
