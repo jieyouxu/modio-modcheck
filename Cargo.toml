@@ -2,6 +2,7 @@
 edition = "2021"
 name = "modio-modcheck"
 version = "0.1.0"
+url = "https://github.com/jieyouxu/modio-modcheck"
 
 [dependencies]
 anyhow = "1.0.86"
