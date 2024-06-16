@@ -1,5 +1,7 @@
 # mod.io modcheck
 
+Check [releases](https://github.com/jieyouxu/modio-modcheck/releases/latest) for the executable.
+
 Check if there are hidden, renamed or deleted mods given a mods list exported by mint. This is
 not needed on latest mint master branch, but this is a mitigation tool for people on mint stable.
 
