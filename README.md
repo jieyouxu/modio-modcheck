@@ -5,6 +5,10 @@ Check [releases](https://github.com/jieyouxu/modio-modcheck/releases/latest) for
 Check if there are hidden, renamed or deleted mods given a mods list exported by mint. This is
 not needed on latest mint master branch, but this is a mitigation tool for people on mint stable.
 
+## Usage
+
+You can run `modio-modcheck --help` to reproduce the following output:
+
 ```
 Usage: modio-modcheck --id <USER_ID> --access-token <OAUTH2_ACCESS_TOKEN> <MOD_LIST>
 
@@ -22,5 +26,10 @@ Options:
   access][access]).
 - You are expected to provide path to a file containing a whitespace-delimited list of mods (this is
   the output of mint's Copy Profile URLs action).
+
+### Windows
+
+You can run the executable `modio-modcheck.exe` by creating a new PowerShell window and dragging
+the `.exe` into the window.
 
 [access]: https://mod.io/me/access
