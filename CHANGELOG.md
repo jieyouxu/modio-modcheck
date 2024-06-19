@@ -3,6 +3,10 @@
 <!-- next-header -->
 ## [Unreleased] - ReleaseDate
 
+- Use `indicatif` to show progress
+- Only show mods with errors (by default)
+- Don't ignore `Cargo.lock`
+
 ## [0.1.1] - 2024-06-15
 
 - Don't build linux-musl artifacts

@@ -1,5 +1,7 @@
 use clap::Parser;
+use console::{Style, Term};
 use fs_err as fs;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::*;
@@ -35,6 +37,26 @@ enum ModCheckError {
     AmbiguousModUrl { url: String },
 }
 
+impl ModCheckError {
+    fn url(&self) -> &str {
+        match self {
+            ModCheckError::ModNotFound { url } => url,
+            ModCheckError::ModioError { url, .. } => url,
+            ModCheckError::AmbiguousModUrl { url } => url,
+        }
+    }
+
+    fn status_code(&self) -> Option<u32> {
+        match self {
+            ModCheckError::ModNotFound { .. } => Some(404),
+            ModCheckError::ModioError { error, .. } => {
+                error.status().map(|code| code.as_u16() as u32)
+            }
+            ModCheckError::AmbiguousModUrl { .. } => None,
+        }
+    }
+}
+
 const MODIO_DRG_ID: u32 = 2475;
 
 #[derive(Debug, Deserialize)]
@@ -50,8 +72,8 @@ struct Mod {
     profile_url: String,
 }
 
-async fn fetch_mods_by_name(
-    client: &reqwest::Client,
+fn fetch_mods_by_name(
+    client: &reqwest::blocking::Client,
     user_id: u64,
     token: &str,
     url: &str,
@@ -60,19 +82,18 @@ async fn fetch_mods_by_name(
     let url = format!(
         "https://u-{user_id}.modapi.io/v1/games/{MODIO_DRG_ID}/mods?visible=1&name_id={name_id}"
     );
-    let res =
-        client.get(url).header("accept", "application/json").bearer_auth(token).send().await?;
-    let mods: Mods = res.json().await?;
+    let res = client.get(url).header("accept", "application/json").bearer_auth(token).send()?;
+    let mods: Mods = res.json()?;
     Ok(mods)
 }
 
-async fn check_url(
-    client: &reqwest::Client,
+fn check_url(
+    client: &reqwest::blocking::Client,
     user_id: u64,
     token: &str,
     url: &str,
 ) -> Result<Mod, ModCheckError> {
-    let mut mods = match fetch_mods_by_name(&client, user_id, token, url).await {
+    let mut mods = match fetch_mods_by_name(&client, user_id, token, url) {
         Ok(mods) => mods,
         Err(error) => {
             debug!(?error, "request failed for <{url}>");
@@ -91,8 +112,7 @@ async fn check_url(
     Ok(r#mod)
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     logging::setup_logging();
 
     let cli = Cli::parse();
@@ -112,36 +132,88 @@ async fn main() -> anyhow::Result<()> {
 
     let mut errors = vec![];
 
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
+
+    let pb = ProgressBar::new(mod_list.len() as u64);
+    pb.set_style(
+        ProgressStyle::with_template(if Term::stdout().size().1 > 80 {
+            "{prefix:>12.cyan.bold} {spinner:.blue} [{bar:57}] {pos}/{len} {wide_msg}"
+        } else {
+            "{prefix:>12.cyan.bold} {spinner:.blue} [{bar:57}] {pos}/{len}"
+        })
+        .unwrap(),
+    );
+    pb.set_prefix("Checking");
+    pb.enable_steady_tick(Duration::from_millis(100));
+
+    let cyan_bold = Style::new().cyan().bold();
+    let blue = Style::new().blue();
+    let red_bold = Style::new().red().bold();
+    let yellow_bold = Style::new().yellow().bold();
 
     const CHUNK_SIZE: usize = 30;
     const SLEEP_SECS: u64 = 60;
     for chunk in mod_list.chunks(CHUNK_SIZE) {
-        
         for url in chunk {
             debug!("checking {url}...");
-            match check_url(&client, cli.user_id, token, url).await {
+            match check_url(&client, cli.user_id, token, url) {
                 Ok(Mod { profile_url, .. }) => {
-                    info!(profile_url, "OK");
+                    debug!(profile_url, "OK");
                 }
                 Err(e) => {
-                    error!(?e, "INVALID");
+                    debug!(?e, "INVALID");
+
+                    let status = e
+                        .status_code()
+                        .map(|code| code.to_string())
+                        .unwrap_or_else(|| "-".to_string());
+                    let url = e.url();
+
+                    let line = format!(
+                        "{:>12} {:>3} {}",
+                        red_bold.apply_to("ERROR"),
+                        yellow_bold.apply_to(status),
+                        url,
+                    );
+                    pb.println(line);
+
                     errors.push(e);
-                    continue;
                 }
             }
+
+            pb.inc(1);
         }
 
-        info!("sleeping 60 seconds to avoid rate-limit");
+        debug!("sleeping 60 seconds to avoid rate-limit");
 
         if chunk.len() == CHUNK_SIZE {
-            tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await;
+            let line = format!(
+                "{:>12} waiting {} to not trigger mod.io rate limit",
+                cyan_bold.apply_to("INFO"),
+                blue.apply_to("60 seconds")
+            );
+            pb.println(line);
+            std::thread::sleep(Duration::from_secs(SLEEP_SECS));
         }
     }
+    pb.finish_and_clear();
 
-    let mut out = fs::File::create("errors.log")?;
+    let error_log = PathBuf::from("errors.log");
+
+    eprintln!("check completed, writing log to `{}`", error_log.display());
+
+    let mut out = fs::File::create(&error_log)?;
     for e in &errors {
-        writeln!(&mut out, "{}", e)?;
+        match e {
+            ModCheckError::ModNotFound { url } => writeln!(&mut out, "ERROR {:<10} {url}", 404)?,
+            ModCheckError::ModioError { url, error } => match error.status() {
+                Some(code) => writeln!(&mut out, "ERROR {code:<10} {url}")?,
+                None => writeln!(&mut out, "ERROR {:<10} {url}", "---")?,
+            },
+            ModCheckError::AmbiguousModUrl { url } => {
+                writeln!(&mut out, "ERROR {:<10} {url}", "ambiguous")?
+            }
+        }
     }
 
     Ok(())
